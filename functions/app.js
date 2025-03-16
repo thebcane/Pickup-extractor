@@ -1,15 +1,15 @@
+// functions/app.js
 const express = require('express');
 const serverless = require('serverless-http');
 const bodyParser = require('body-parser');
-const { runFFmpegCommand } = require('../ffmpeg-utils');
-const mammoth = require('mammoth');
+const { runFFmpegCommand } = require('../ffmpeg-utils'); // You're probably not using this in this function
+const mammoth = require('mammoth'); // You're probably not using this either, since you're processing in the Google Script
 
 const app = express();
-const router = express.Router(); // Use Express Router
+const router = express.Router();
 
 app.use(bodyParser.json({ limit: '50mb' }));
 
-// Use the router for the /process route
 router.post('/process', async (req, res) => {
     try {
         const { documentName, plainText, formattedText, talentName } = req.body;
@@ -18,63 +18,59 @@ router.post('/process', async (req, res) => {
             return res.status(400).json({ error: 'Missing document content' });
         }
 
-        // --- Bracketed Text Extraction (from plainText) ---
+        // --- Optimized Bracketed Text Extraction ---
         const bracketedPickups = [];
-        if (plainText) { //Check if plain text exists.
-            const bracketRegex = /$$(.*?)$$/g;  //  non-greedy matching
+        if (plainText) {
+            const bracketRegex = /$$(.*?)$$/g;
             let match;
             let contextIndex = 0;
             while ((match = bracketRegex.exec(plainText)) !== null) {
                 const bracketText = match[1].trim();
                 if (bracketText) {
+                    //  Optimized context extraction:  Only get context if there's bracketed text.
                     const startPos = Math.max(0, match.index - 100);
                     const endPos = Math.min(plainText.length, match.index + match[0].length + 100);
                     const context = plainText.substring(startPos, endPos).trim();
 
-                    contextIndex++;
                     bracketedPickups.push({
-                        id: contextIndex, //Or some other unique ID>
+                        id: ++contextIndex, // Use pre-increment for slightly better performance
                         highlightedText: bracketText,
                         context: context,
                         annotationType: 'bracket',
-                        annotationSubtype: 'square-brackets', // Adjust as needed
+                        annotationSubtype: 'square-brackets',
                         timestamp: new Date().toISOString()
                     });
                 }
             }
         }
 
-        // --- Formatted Text Extraction ---
-
+        // --- Optimized Formatted Text Extraction ---
         const formattedPickups = [];
-
-        if (formattedText) //Check that formattedText exists.
-        {
-            formattedText.forEach((segment, index) => {
-
+        if (formattedText) { // Check for existence
+            for (const segment of formattedText) { // Use for...of loop for better performance
                 let annotationType = null;
                 let annotationSubtype = null;
 
+                // Use simple if/else if for mutually exclusive conditions
                 if (segment.isBold) {
                     annotationType = 'bold';
                     annotationSubtype = 'bold-text';
                 } else if (segment.isUnderline) {
                     annotationType = 'underline';
                     annotationSubtype = 'underline-text';
-                } else if (segment.backgroundColor) {  // Check for ANY background color
+                } else if (segment.backgroundColor) {
                     annotationType = 'highlight';
                     annotationSubtype = 'background-color';
                 }
-                //Add more checks as needed (strikethrough, etc.)
 
                 if (annotationType) {
-                    // Find the context. Since we have start/end indexes, this is better:
+                    // Optimized context extraction:
                     const contextStart = Math.max(0, segment.startIndex - 100);
                     const contextEnd = Math.min(plainText.length, segment.endIndex + 100);
                     const context = plainText.substring(contextStart, contextEnd).trim();
 
                     formattedPickups.push({
-                        id: formattedPickups.length + 1, //Simple ID.  Use a UUID in production.
+                        id: formattedPickups.length + 1, //  Keep simple ID generation
                         highlightedText: segment.text,
                         context: context,
                         annotationType: annotationType,
@@ -82,17 +78,13 @@ router.post('/process', async (req, res) => {
                         timestamp: new Date().toISOString(),
                     });
                 }
-            });
+            }
         }
 
-
-        // Combine pickups
-        const allPickups = [...bracketedPickups, ...formattedPickups];
-
-        // Remove duplicates (based on highlightedText, adjust as needed)
+        // --- Optimized Duplicate Removal ---
         const uniquePickups = [];
         const seenText = new Set();
-        for (const pickup of allPickups) {
+        for (const pickup of [...bracketedPickups, ...formattedPickups]) { // Combine *after* individual processing
             if (!seenText.has(pickup.highlightedText)) {
                 uniquePickups.push(pickup);
                 seenText.add(pickup.highlightedText);
@@ -103,7 +95,7 @@ router.post('/process', async (req, res) => {
         res.status(200).json({
             message: 'Pickups extracted successfully',
             pickups: uniquePickups,
-            talentName: talentName // Echo back any other data you want
+            talentName: talentName
         });
 
     } catch (error) {
@@ -112,13 +104,10 @@ router.post('/process', async (req, res) => {
     }
 });
 
-// Simple route for testing (optional, but helpful)
+// Keep the test route
 router.get('/', (req, res) => {
     res.send('Pickup Extractor Server is running!');
 });
 
-// Mount the router at the /.netlify/functions/app path
 app.use('/.netlify/functions/app', router);
-
-// Export the app wrapped with serverless-http
 module.exports.handler = serverless(app);
