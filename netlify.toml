@@ -1,0 +1,10 @@
+[build]
+  command = "npm install"  # Command to install dependencies
+  functions = "functions"  # Directory for serverless functions (optional, but good practice)
+  publish = "."          # The directory Netlify should serve (root in this case)
+
+[[redirects]]
+  from = "/api/*"       # Redirect API requests to the serverless function
+  to = "/.netlify/functions/app/:splat"
+  status = 200
+
