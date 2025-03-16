@@ -12,6 +12,8 @@ app.use(bodyParser.json({ limit: '50mb' }));
 
 router.post('/process', async (req, res) => {
     try {
+        console.time('Total Processing Time'); // Start timer for the entire request
+
         const { documentName, plainText, formattedText, talentName } = req.body;
 
         if (!plainText || !formattedText) {
@@ -97,10 +99,12 @@ router.post('/process', async (req, res) => {
             pickups: uniquePickups,
             talentName: talentName
         });
+        console.timeEnd('Total Processing Time'); // End timer for the entire request
 
     } catch (error) {
         console.error('Error processing document:', error);
         res.status(500).json({ error: 'Failed to process document', details: error.message });
+        console.timeEnd('Total Processing Time'); // Ensure timer ends even on error
     }
 });
 
